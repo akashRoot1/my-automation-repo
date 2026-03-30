@@ -6,12 +6,81 @@ The flagship workflow scrapes LinkedIn job postings, filters them against your c
 ---
 
 ## Table of Contents
-1. [What the automation does](#what-the-automation-does)
-2. [Prerequisites](#prerequisites)
-3. [Running with Docker Compose](#running-with-docker-compose)
-4. [Importing the workflow into n8n](#importing-the-workflow-into-n8n)
-5. [Secrets & credentials](#secrets--credentials)
-6. [LinkedIn scraping reliability](#linkedin-scraping-reliability)
+1. [How this repository was built — process summary](#how-this-repository-was-built--process-summary)
+2. [What the automation does](#what-the-automation-does)
+3. [Prerequisites](#prerequisites)
+4. [Running with Docker Compose](#running-with-docker-compose)
+5. [Importing the workflow into n8n](#importing-the-workflow-into-n8n)
+6. [Secrets & credentials](#secrets--credentials)
+7. [LinkedIn scraping reliability](#linkedin-scraping-reliability)
+
+---
+
+## How this repository was built — process summary
+
+### 1. Initial request
+The user shared a screenshot of an n8n workflow and asked for it to be added to their GitHub repository (`akashRoot1/my-automation-repo`).  Because a screenshot alone cannot capture node parameters, expressions, or credential IDs, two clarifying questions were raised before any files were written:
+
+- **Which repository?** — the exact `owner/repo` slug.
+- **Which integration format?** — three options were offered (see below).
+- **Actual workflow data?** — the user was asked to export the workflow from n8n (**Workflow → … → Download / Export → JSON**) and share the JSON.
+
+### 2. Format clarification — why Option B (n8n self-host) instead of Option C (GitHub Actions)
+
+Three implementation options were presented:
+
+| Option | Description | When it makes sense |
+|--------|-------------|---------------------|
+| **A — n8n export only** | Drop the workflow JSON + README into the repo (no runtime). | You already have a running n8n instance elsewhere. |
+| **B — Self-host n8n** ✅ | Docker Compose (`docker-compose.yml`) + PostgreSQL + `.env.example` + workflow JSON. | You want to spin up a production-grade n8n server with one command. |
+| **C — GitHub Actions** | Rebuild the automation as a `.github/workflows/` YAML file. | The workflow is a CI/CD task that fits the GitHub runner model (short-lived, triggered by repo events). |
+
+**Option B was chosen** for the following reasons:
+
+- The workflow uses long-running nodes (HTTP requests with polite 2-second waits between iterations, loop batching) that exceed GitHub Actions' typical job boundaries.
+- It requires **persistent credential storage** (Google OAuth tokens, Gemini API key) that GitHub Actions secrets do not natively support for n8n's encrypted credential model.
+- It has a **Schedule Trigger** node designed to run on a recurring basis inside n8n — replicating this in GitHub Actions would require a `cron:` schedule that restarts a full runner on every run, with no shared state.
+- n8n's visual editor makes it easy for the user to adjust filters, reconnect credentials, and extend nodes without touching YAML or code.
+
+### 3. Workflow export and data handoff
+
+The user exported the workflow from their n8n instance (**Workflow → … → Download / Export → JSON**).  
+The exported file (`job-search-ultimate.json`) was placed at `n8n/workflows/job-search-ultimate.json`.
+
+> **Credential IDs are stripped on import.** The JSON contains credential *references* (names such as `"Google Drive account"`) but the actual OAuth tokens never leave the original n8n instance. After importing into a fresh instance, each credential-bearing node will show a warning until you reconnect or recreate the credential — this is the expected and secure behaviour.
+
+### 4. GitHub Actions / permissions dialogue
+
+No GitHub Actions workflow files were created for this project.  The only GitHub Actions involvement was the automated pull-request that added the files to this repository.  Repository permissions required were:
+
+- **Contents: write** — to create and push the new files (`docker-compose.yml`, `.env.example`, `n8n/workflows/job-search-ultimate.json`, `README.md`, `.gitignore`).
+- No workflow-dispatch, no `GITHUB_TOKEN` secrets, and no Actions runner invocations were needed for the n8n stack itself.
+
+### 5. Files added and their purpose
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Defines two services: **postgres** (PostgreSQL 16) and **n8n** (latest). Postgres data and n8n data are each stored in a named Docker volume. The n8n service waits for Postgres to pass its health check before starting. All secrets are read from environment variables — never hard-coded. |
+| `.env.example` | Template for the required environment variables. Copy to `.env`, fill in real values, and **never commit `.env`**. |
+| `n8n/workflows/job-search-ultimate.json` | The exported n8n workflow. Import this file into n8n via **Workflows → Import from file…** and then reconnect credentials. |
+| `README.md` | This file — setup instructions, environment-variable reference, import guide, and process narrative. |
+| `.gitignore` | Prevents `.env`, `n8n_data/`, and `postgres_data/` from being accidentally committed. |
+
+### 6. Credentials handling
+
+- **Postgres password** (`POSTGRES_PASSWORD`) and **n8n encryption key** (`N8N_ENCRYPTION_KEY`) are injected via `.env` at runtime — they are never stored in the repository.
+- Google OAuth tokens (Drive, Sheets, Gmail) are generated interactively through n8n's credential UI and stored **encrypted inside the `n8n_data` Docker volume**, protected by `N8N_ENCRYPTION_KEY`.
+- The Gemini API key is likewise stored as an n8n credential, not in any file tracked by Git.
+- `.gitignore` explicitly excludes `.env`, `n8n_data/`, and `postgres_data/` as a defence-in-depth measure.
+
+### 7. What you will have once the PR is merged
+
+After merging this PR and following the setup steps you will have:
+
+- A **one-command Docker Compose stack** (`docker compose up -d`) that launches a production-ready n8n instance backed by a PostgreSQL database, with data persisted across restarts.
+- A **self-hosted n8n editor** reachable at `http://localhost:5678` (or your custom domain) where you can manage, schedule, and monitor all your automations.
+- The **LinkedIn job-search workflow** pre-imported and ready to connect to your Google credentials and Gemini API key.
+- A clear, auditable Git history showing every file that was added and why — with no secrets committed.
 
 ---
 

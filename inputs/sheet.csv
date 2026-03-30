@@ -1,8 +1,8 @@
-keyword,location,job_type
-QA Engineer,Ireland,any
-QA Automation Engineer,Ireland,any
-SDET,Ireland,any
-Test Engineer,Ireland,any
-Quality Engineer,Ireland,any
-Automation Engineer in Test,Ireland,any
-Software Engineer in Test,Ireland,any
+keyword,location,job_type,remote
+QA Engineer,Ireland,any,any
+QA Automation Engineer,Ireland,any,any
+SDET,Ireland,any,any
+Test Engineer,Ireland,any,any
+Quality Engineer,Ireland,any,any
+Automation Engineer in Test,Ireland,any,any
+Software Engineer in Test,Ireland,any,any

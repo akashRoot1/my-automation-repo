@@ -1,0 +1,16 @@
+# Local environment secrets – never commit this file
+.env
+
+# n8n local data (written by docker volumes if bind-mounted)
+n8n_data/
+postgres_data/
+
+# macOS
+.DS_Store
+
+# Editor directories
+.idea/
+.vscode/
+
+# OS
+Thumbs.db

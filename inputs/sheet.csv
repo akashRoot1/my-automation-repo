@@ -1,6 +1,8 @@
-keyword,location,job_type,experience_level,remote
-Software Engineer,San Francisco CA,full_time,mid_senior_level,false
-Python Developer,,full_time,mid_senior_level,true
-Data Engineer,New York NY,full_time,mid_senior_level,false
-Backend Engineer,Remote,,entry_level,true
-Machine Learning Engineer,Seattle WA,full_time,mid_senior_level,false
+keyword,location,job_type,remote
+QA Engineer,Ireland,any,any
+QA Automation Engineer,Ireland,any,any
+SDET,Ireland,any,any
+Test Engineer,Ireland,any,any
+Quality Engineer,Ireland,any,any
+Automation Engineer in Test,Ireland,any,any
+Software Engineer in Test,Ireland,any,any

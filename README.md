@@ -113,16 +113,20 @@ no results or rate-limits the requests.
 
 ## Setting up GitHub Secrets
 
+> ⚠️ **These secrets are REQUIRED. Without them the daily workflow will fail and no email will be sent.**
+
 Go to **Settings → Secrets and variables → Actions → New repository secret** and add:
 
-| Secret name | Description |
-|-------------|-------------|
-| `SMTP_HOST` | SMTP server hostname (e.g. `smtp.mailgun.org`) |
-| `SMTP_PORT` | SMTP port – `587` for STARTTLS (default) |
-| `SMTP_USER` | SMTP login username |
-| `SMTP_PASS` | SMTP password or API key |
-| `EMAIL_FROM` | Sender address shown in From header |
-| `EMAIL_TO` | Recipient address (e.g. `akashvikram98@gmail.com`) |
+| Secret name | Required | Description |
+|-------------|----------|-------------|
+| `SMTP_HOST` | ✅ | SMTP server hostname (e.g. `smtp.mailgun.org`) |
+| `SMTP_PORT` | optional | SMTP port – `587` for STARTTLS (default) |
+| `SMTP_USER` | ✅ | SMTP login username |
+| `SMTP_PASS` | ✅ | SMTP password or API key |
+| `EMAIL_FROM` | optional | Sender address shown in From header |
+| `EMAIL_TO` | ✅ | Recipient address (e.g. `akashvikram98@gmail.com`) |
+
+**If any of `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, or `EMAIL_TO` are missing the workflow will fail with a red ✗** so you are immediately alerted that the secrets need to be added.
 
 > ⚠️ **Never commit real credentials.** The `.env` file is git-ignored.
 
@@ -179,8 +183,44 @@ export EMAIL_TO=akashvikram98@gmail.com
 python scripts/fetch_jobs.py
 ```
 
-If the SMTP variables are missing, the script still runs and prints the job list to
-stdout — useful for testing without email.
+### Dry-run (print jobs without sending email)
+
+Set `DRY_RUN=1` to skip SMTP entirely and just print results to stdout:
+
+```bash
+DRY_RUN=1 python scripts/fetch_jobs.py
+```
+
+You can also trigger a dry-run from GitHub Actions:  
+**Actions → Daily LinkedIn Job Fetch → Run workflow → set "dry_run" to `true`**.
+
+---
+
+## Troubleshooting
+
+### "Workflow shows green ✓ but I received no email"
+
+**Root cause:** The required GitHub Secrets are not set. The workflow ran successfully but
+the script skipped sending email because `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, or
+`EMAIL_TO` were empty.
+
+**Fix:**
+1. Go to **Settings → Secrets and variables → Actions** in your repository.
+2. Add all four required secrets: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_TO`.
+3. See [Supported SMTP providers](#supported-smtp-providers) for recommended free services.
+4. Re-run the workflow manually: **Actions → Daily LinkedIn Job Fetch → Run workflow**.
+
+After this fix, if secrets are ever missing again the workflow will fail with a
+**red ✗** (exit code 1) so you are immediately alerted.
+
+### How to verify email delivery from the workflow logs
+
+1. Go to **Actions → Daily LinkedIn Job Fetch** → click the latest run.
+2. Expand the **"Fetch LinkedIn jobs and send email"** step.
+3. Look for:
+   - `[INFO] Email sent → akashvikram98@gmail.com` → email was dispatched successfully.
+   - `[ERROR] SMTP not configured – missing secrets: …` → secrets are not set (see above).
+   - `[ERROR] Failed to send email: …` → SMTP credentials are wrong or the server rejected the connection.
 
 ---
 

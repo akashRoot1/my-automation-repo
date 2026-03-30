@@ -14,8 +14,11 @@ Usage (local):
     export EMAIL_TO=your-email@example.com
     python scripts/fetch_jobs.py
 
-If SMTP_HOST / SMTP_USER / SMTP_PASS / EMAIL_TO are not set the script will
-still run and print the job list to stdout (useful for local testing).
+If SMTP_HOST / SMTP_USER / SMTP_PASS / EMAIL_TO are not set the script exits
+with code 1 so that GitHub Actions shows a red ✗ (alerting you to add the
+missing secrets).  Set DRY_RUN=1 to skip the email check entirely, e.g.:
+
+    DRY_RUN=1 python scripts/fetch_jobs.py
 
 Filtering logic:
     - Job titles containing 'Senior', 'Staff', 'Principal', 'Lead', or 'Manager'
@@ -427,10 +430,24 @@ def main() -> None:
             sys.exit(1)
     else:
         missing = [k for k in required_env if not os.environ.get(k)]
-        print(
-            f"[INFO] SMTP not fully configured (missing: {', '.join(missing)}) "
-            "– skipping email send."
-        )
+        # DRY_RUN must be explicitly set to a truthy value ("1", "true", "yes").
+        # Any other value – including the string "false" – is treated as disabled.
+        dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+        if dry_run:
+            print(
+                f"[INFO] DRY_RUN mode: SMTP not configured "
+                f"(missing: {', '.join(missing)}) – skipping email send."
+            )
+        else:
+            print(
+                f"[ERROR] SMTP not configured – missing secrets: {', '.join(missing)}.\n"
+                "Add these as GitHub Actions secrets:\n"
+                "  Settings → Secrets and variables → Actions → New repository secret\n"
+                "Required: SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_TO\n"
+                "To skip email sending intentionally, set the DRY_RUN=1 environment variable.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 if __name__ == "__main__":

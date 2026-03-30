@@ -1,0 +1,272 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "9dd871da-bb3b-4ebe-963b-128fcff34099",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "AcZcDztmyUtsa3Kc",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "6bdbd596-b061-427a-b97c-e789fe7090a4",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1m_p1yu6j10cuHK-bImqz86Oraegz5j9ii2u5LJqxg1g",
+          "mode": "list",
+          "cachedResultName": "Job Search N8N",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1m_p1yu6j10cuHK-bImqz86Oraegz5j9ii2u5LJqxg1g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Filter",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1m_p1yu6j10cuHK-bImqz86Oraegz5j9ii2u5LJqxg1g/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        624,
+        0
+      ],
+      "id": "484e0f62-0d1a-4637-8b58-4942d6d0a4e0",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "oD5JyqmvqMOPNTeR",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let url = \"https://www.linkedin.com/jobs/search/?f_TPR=r86400\"\n\nconst keyword = $input.first().json.Keyword\nconst location = $input.first().json.Location\nconst experienceLevel = $input.first().json['Experience Level']\nconst remote = $input.first().json.Remote\nconst easyApply = $input.first().json['Easy Apply']\n\nif (keyword != \"\") {\n  url += `&keywords=${keyword}`;\n}\n\nif (location != \"\") {\n  url += `&location=${location}`;\n}\n\nif (experienceLevel !== \"\") {\n  // Transform experience levels to LinkedIn codes\n  // Internship -> 1, Entry level -> 2, Associate -> 3\n  // Mid-Senior level -> 4, Director -> 5, Executive -> 6\n  const transformedExperiences = experienceLevel\n    .split(\",\")\n    .map((exp) => {\n      switch (exp.trim()) {\n        case \"Internship\": return \"1\";\n        case \"Entry level\": return \"2\";\n        case \"New Grad\": return \"3\";\n        default: return \"\";\n      }\n    })\n    .filter(Boolean);\n  url += `&f_E=${transformedExperiences.join(\",\")}`;\n}\n\nif (remote.length != \"\") {\n  // Transform remote options to LinkedIn codes\n  // On-Site -> 1, Remote -> 2, Hybrid -> 3\n  const transformedRemote = remote\n    .split(\",\")\n    .map((e) => {\n      switch (e.trim()) {\n        case \"Remote\": return \"2\";\n        case \"Hybrid\": return \"3\";\n        case \"On-Site\": return \"1\";\n        default: return \"\";\n      }\n    })\n    .filter(Boolean);\n  url += `&f_WT=${transformedRemote.join(\",\")}`;\n}\n\nif (easyApply != \"\") {\n  url += \"&f_EA=true\";\n}\n\nreturn {url}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "c4bc1e36-3acb-4637-a867-085a3079eb14",
+      "name": "LinkedIn Search URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "dc8f887e-81e6-44bf-a356-13f61d6a0388",
+      "name": "Fetch jobs from LinkedIn"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "jobs",
+              "cssSelector": "ul.jobs-search__results-list li div a[class*=\\\"base-card\\\"]",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "c9e59fa5-49df-47bb-89c0-87ab7845fd2f",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "jobs",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "c2aec608-8302-4bcd-a00b-2e3d293b89bf",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1568,
+        816
+      ],
+      "id": "00612b80-a789-4615-9942-e62584e22fdf",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -32,
+        208
+      ],
+      "id": "293a9da0-abfd-491c-9ee6-926fb6de30f1",
+      "name": "Wait",
+      "webhookId": "12409f66-fbe7-48bd-b9d7-68449f197264"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.jobs }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        208
+      ],
+      "id": "2f0cb178-8831-458f-9c8c-f9fbbc52abbc",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "Title",
+              "cssSelector": "div h1"
+            },
+            {
+              "key": "Company",
+              "cssSelector": "div span a"
+            },
+            {
+              "key": "Location",
+              "cssSelector": "div span[class*='topcard__flavor topcard__flavor--bullet']"
+            },
+            {
+              "key": "Description",
+              "cssSelector": "div.description__text.description__text--rich"
+            },
+            {
+              "key": "Job ID",
+              "cssSelector": "a[data-item-type='semaphore']",
+              "returnValue": "attribute",
+              "attribute": "data-semaphore-content-urn"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        384,
+        208
+      ],
+      "id": "33d05837-7b57-4f7d-9aa1-d79fe3e71753",
+      "name": "HTML1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "240418dc-3349-48d5-ba59-3aa590d71950",
+              "name": "Description",
+              "value": "={{ $json.Description.replaceAll(/\\s+/g, \" \\n\")}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        208
+      ],
+      "id": "43feb566-7427-455c-9109-2a6ba56764f7",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "25e5c7d3-60ea-47bf-b4bc-cb62a22a3ad7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1da5d9ac3e2974ca203c09fc21d9eb832e61e497fa9e11c9fbcaae0e18a9c185"
+  },
+  "id": "SrQYoBJKHtuSzi6B",
+  "tags": []
+}

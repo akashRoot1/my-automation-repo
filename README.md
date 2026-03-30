@@ -55,20 +55,59 @@ One row per job search. Supported columns:
 
 | Column | Required | Example values |
 |--------|----------|----------------|
-| `keyword` | ✅ | `Software Engineer`, `Python Developer` |
-| `location` | optional | `San Francisco CA`, `Remote` |
-| `job_type` | optional | `full_time`, `part_time`, `contract`, `internship` |
-| `experience_level` | optional | `entry_level`, `mid_senior_level`, `associate`, `director` |
-| `remote` | optional | `true` / `false` |
+| `keyword` | ✅ | `QA Engineer`, `SDET` |
+| `location` | optional | `Ireland`, `Dublin` |
+| `job_type` | optional | `full_time`, `part_time`, `contract`, `internship`, `any` |
+| `remote` | optional | `any` (remote + hybrid + on-site), `true` (remote only), `hybrid`, `false` (on-site only) |
 
-Example `inputs/sheet.csv`:
+> **Note:** `experience_level` is no longer used in `sheet.csv`.  
+> Seniority filtering is applied automatically at the script level (see [Filtering logic](#filtering-logic) below).
+
+Example `inputs/sheet.csv` (current configuration — QA roles in Ireland):
 
 ```csv
-keyword,location,job_type,experience_level,remote
-Software Engineer,San Francisco CA,full_time,mid_senior_level,false
-Python Developer,,full_time,mid_senior_level,true
-Data Engineer,New York NY,full_time,mid_senior_level,false
+keyword,location,job_type,remote
+QA Engineer,Ireland,any,any
+QA Automation Engineer,Ireland,any,any
+SDET,Ireland,any,any
+Test Engineer,Ireland,any,any
+Quality Engineer,Ireland,any,any
+Automation Engineer in Test,Ireland,any,any
+Software Engineer in Test,Ireland,any,any
 ```
+
+---
+
+## Filtering logic
+
+### Prioritised job titles
+The CSV is pre-populated with QA-focused roles that match the target profile:
+
+- QA Engineer / QA Automation Engineer
+- SDET (Junior–Mid)
+- Test Engineer (Automation)
+- Quality Engineer
+- Automation Engineer in Test
+- Software Engineer in Test (non-senior)
+
+### Seniority exclusion with experience override
+After fetching job cards the script automatically excludes any job whose title
+contains one of these seniority keywords:
+
+> **Senior · Staff · Principal · Lead · Manager**
+
+**Exception:** if the individual job description explicitly mentions that
+**3–5 years** of experience is acceptable (e.g. *"3-5 years of experience"*,
+*"3 to 5 years"*), the job is **kept** regardless of the title.
+
+### No-jobs-found email
+If zero jobs remain after filtering across **all** search rows, the script still
+sends an email to the configured `EMAIL_TO` address with the subject:
+
+> *LinkedIn Job Digest – No jobs found today*
+
+This ensures you always receive a daily confirmation, even when LinkedIn returns
+no results or rate-limits the requests.
 
 ---
 

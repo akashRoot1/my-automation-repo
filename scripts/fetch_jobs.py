@@ -16,10 +16,17 @@ Usage (local):
 
 If SMTP_HOST / SMTP_USER / SMTP_PASS / EMAIL_TO are not set the script will
 still run and print the job list to stdout (useful for local testing).
+
+Filtering logic:
+    - Job titles containing 'Senior', 'Staff', 'Principal', 'Lead', or 'Manager'
+      are excluded unless the job description explicitly mentions 3–5 years of
+      experience as acceptable.
+    - If no jobs are found across all searches, a "no jobs found" email is sent.
 """
 
 import csv
 import os
+import re
 import smtplib
 import sys
 import time
@@ -75,6 +82,20 @@ HEADERS: dict[str, str] = {
 MAX_JOBS_PER_SEARCH = 15
 REQUEST_DELAY_SECONDS = 2
 
+# ── Title / experience filters ─────────────────────────────────────────────────
+
+# Titles containing any of these words are excluded unless the job description
+# explicitly mentions that 3–5 years of experience is acceptable.
+EXCLUDED_TITLE_KEYWORDS: frozenset[str] = frozenset(
+    {"senior", "staff", "principal", "lead", "manager"}
+)
+
+# Matches "3-5 years", "3–5 years", "3 to 5 years", "three to five years", etc.
+_EXPERIENCE_RANGE_RE = re.compile(
+    r"\b(3|three)\s*[-–—to]+\s*(5|five)\s*years?\b",
+    re.IGNORECASE,
+)
+
 
 # ── URL builder ────────────────────────────────────────────────────────────────
 
@@ -91,7 +112,8 @@ def build_search_url(row: dict[str, str]) -> str:
         params["location"] = location
 
     job_type = row.get("job_type", "").strip().lower()
-    if job_type and job_type in JOB_TYPE_MAP:
+    # 'any' means no job-type filter
+    if job_type and job_type != "any" and job_type in JOB_TYPE_MAP:
         params["f_JT"] = JOB_TYPE_MAP[job_type]
 
     exp_level = row.get("experience_level", "").strip().lower()
@@ -99,12 +121,55 @@ def build_search_url(row: dict[str, str]) -> str:
         params["f_E"] = EXPERIENCE_MAP[exp_level]
 
     remote_val = row.get("remote", "").strip().lower()
-    if remote_val in ("true", "yes", "1"):
-        params["f_WT"] = "2"  # remote
-    elif remote_val in ("false", "no", "0") and location:
-        params["f_WT"] = "1"  # on-site
+    if remote_val == "any":
+        # No f_WT filter → LinkedIn returns remote, hybrid, and on-site results
+        pass
+    elif remote_val in ("true", "yes", "1", "remote"):
+        params["f_WT"] = "2"  # remote only
+    elif remote_val == "hybrid":
+        params["f_WT"] = "3"  # hybrid only
+    elif remote_val in ("false", "no", "0", "onsite") and location:
+        params["f_WT"] = "1"  # on-site only
 
     return f"{_LINKEDIN_GUEST_API}?{urlencode(params)}"
+
+
+# ── Title / experience helpers ─────────────────────────────────────────────────
+
+def _has_excluded_keyword(title: str) -> bool:
+    """Return True if the job title contains a seniority/exclusion keyword."""
+    title_lower = title.lower()
+    # Use word-boundary matching to avoid false positives (e.g. "leadership")
+    for kw in EXCLUDED_TITLE_KEYWORDS:
+        if re.search(rf"\b{re.escape(kw)}\b", title_lower):
+            return True
+    return False
+
+
+def _fetch_description(job_url: str) -> str:
+    """Fetch the plain-text job description from an individual LinkedIn job page.
+
+    Returns an empty string on any error.
+    """
+    try:
+        resp = requests.get(job_url, headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # LinkedIn renders description inside one of these containers
+        desc_tag = soup.find(
+            "div", class_="show-more-less-html__markup"
+        ) or soup.find("div", class_="description__text")
+        if desc_tag:
+            return desc_tag.get_text(" ", strip=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[WARN] Could not fetch description for {job_url!r}: {exc}", file=sys.stderr)
+    return ""
+
+
+def _description_allows_experience_range(job_url: str) -> bool:
+    """Return True if the job description mentions 3–5 years as acceptable."""
+    description = _fetch_description(job_url)
+    return bool(_EXPERIENCE_RANGE_RE.search(description))
 
 
 # ── Scraper ────────────────────────────────────────────────────────────────────
@@ -113,15 +178,21 @@ def fetch_jobs(url: str, max_jobs: int = MAX_JOBS_PER_SEARCH) -> list[dict[str, 
     """Fetch job listings from a LinkedIn guest-API URL.
 
     Returns a list of dicts with keys: title, company, location, url.
+
+    Post-processing rules:
+    - Jobs whose titles contain 'Senior', 'Staff', 'Principal', 'Lead', or
+      'Manager' are excluded, unless the individual job description explicitly
+      mentions that 3–5 years of experience is acceptable.
+
     Returns an empty list on network / parsing errors.
     """
-    jobs: list[dict[str, str]] = []
+    raw_jobs: list[dict[str, str]] = []
     try:
         resp = requests.get(url, headers=HEADERS, timeout=20)
         resp.raise_for_status()
     except requests.RequestException as exc:
         print(f"[WARN] Request failed for {url!r}: {exc}", file=sys.stderr)
-        return jobs
+        return raw_jobs
 
     soup = BeautifulSoup(resp.text, "html.parser")
     cards = soup.find_all("div", class_="base-card")[:max_jobs]
@@ -139,11 +210,33 @@ def fetch_jobs(url: str, max_jobs: int = MAX_JOBS_PER_SEARCH) -> list[dict[str, 
             link = link_tag["href"].split("?")[0] if link_tag else ""
 
             if link:
-                jobs.append(
+                raw_jobs.append(
                     {"title": title, "company": company, "location": location, "url": link}
                 )
         except (AttributeError, KeyError, TypeError) as exc:
             print(f"[WARN] Could not parse job card: {exc}", file=sys.stderr)
+
+    # ── Apply seniority filter ─────────────────────────────────────────────────
+    jobs: list[dict[str, str]] = []
+    for job in raw_jobs:
+        if not _has_excluded_keyword(job["title"]):
+            jobs.append(job)
+        else:
+            # Give the job a second chance: check whether the description
+            # explicitly states 3–5 years is acceptable.
+            time.sleep(REQUEST_DELAY_SECONDS)
+            if _description_allows_experience_range(job["url"]):
+                print(
+                    f"[INFO]   Keeping '{job['title']}' – description allows 3–5 yrs",
+                    file=sys.stderr,
+                )
+                jobs.append(job)
+            else:
+                print(
+                    f"[INFO]   Excluded '{job['title']}' (seniority keyword; "
+                    "no 3–5 yr override found)",
+                    file=sys.stderr,
+                )
 
     return jobs
 
@@ -164,17 +257,26 @@ def build_email_body(
         f"Total jobs found: {total}",
         "",
     ]
-    for label, jobs in all_jobs.items():
-        lines.append(f"Search: {label}")
-        lines.append("-" * 40)
-        if jobs:
-            for j in jobs:
-                lines.append(f"  {j['title']} @ {j['company']}  ({j['location']})")
-                lines.append(f"  {j['url']}")
-                lines.append("")
-        else:
-            lines.append("  No results found.\n")
-        lines.append("")
+
+    if total == 0:
+        lines += [
+            "No jobs were found for any of your searches today.",
+            "This may be due to LinkedIn rate-limiting or a genuine lack of",
+            "new postings matching your criteria. Try again tomorrow.",
+            "",
+        ]
+    else:
+        for label, jobs in all_jobs.items():
+            lines.append(f"Search: {label}")
+            lines.append("-" * 40)
+            if jobs:
+                for j in jobs:
+                    lines.append(f"  {j['title']} @ {j['company']}  ({j['location']})")
+                    lines.append(f"  {j['url']}")
+                    lines.append("")
+            else:
+                lines.append("  No results found.\n")
+            lines.append("")
 
     lines += [
         "=" * 50,
@@ -184,21 +286,31 @@ def build_email_body(
     plain = "\n".join(lines)
 
     # ---- HTML ----
-    html_rows = []
-    for label, jobs in all_jobs.items():
-        html_rows.append(f"<h3 style='color:#0a66c2'>🔍 {label}</h3>")
-        if jobs:
-            html_rows.append("<ul>")
-            for j in jobs:
-                html_rows.append(
-                    f'<li style="margin-bottom:6px">'
-                    f'<a href="{j["url"]}" style="font-weight:bold">{j["title"]}</a>'
-                    f" &mdash; {j['company']}, <em>{j['location']}</em>"
-                    f"</li>"
-                )
-            html_rows.append("</ul>")
-        else:
-            html_rows.append("<p><em>No results found.</em></p>")
+    if total == 0:
+        body_html = (
+            "<p style='color:#c00;font-size:1.1em'>"
+            "⚠️ No jobs were found for any of your searches today."
+            "</p>"
+            "<p>This may be due to LinkedIn rate-limiting or a genuine lack of "
+            "new postings matching your criteria. Try again tomorrow.</p>"
+        )
+    else:
+        html_rows = []
+        for label, jobs in all_jobs.items():
+            html_rows.append(f"<h3 style='color:#0a66c2'>🔍 {label}</h3>")
+            if jobs:
+                html_rows.append("<ul>")
+                for j in jobs:
+                    html_rows.append(
+                        f'<li style="margin-bottom:6px">'
+                        f'<a href="{j["url"]}" style="font-weight:bold">{j["title"]}</a>'
+                        f" &mdash; {j['company']}, <em>{j['location']}</em>"
+                        f"</li>"
+                    )
+                html_rows.append("</ul>")
+            else:
+                html_rows.append("<p><em>No results found.</em></p>")
+        body_html = "".join(html_rows)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -206,7 +318,7 @@ def build_email_body(
 <body style="font-family:Arial,sans-serif;max-width:700px;margin:auto;padding:16px">
   <h2 style="color:#0a66c2">LinkedIn Job Digest</h2>
   <p style="color:#555">Total jobs found: <strong>{total}</strong></p>
-  {"".join(html_rows)}
+  {body_html}
   <hr>
   <p style="font-size:12px;color:#888">
     Generated by the LinkedIn Job Fetcher GitHub Action.<br>
@@ -296,7 +408,10 @@ def main() -> None:
 
     # 4. Build email content
     total_jobs = sum(len(v) for v in all_jobs.values())
-    subject = f"LinkedIn Job Digest – {total_jobs} job(s) found"
+    if total_jobs == 0:
+        subject = "LinkedIn Job Digest – No jobs found today"
+    else:
+        subject = f"LinkedIn Job Digest – {total_jobs} job(s) found"
     plain, html = build_email_body(all_jobs, resume_text)
 
     # 5. Print summary

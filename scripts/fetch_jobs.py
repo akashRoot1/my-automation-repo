@@ -364,11 +364,30 @@ def send_email(subject: str, plain: str, html: str) -> None:
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
+    def format_smtp_message(message: object) -> str:
+        if message is None:
+            return ""
+        if isinstance(message, bytes):
+            return message.decode("utf-8", "replace").strip()
+        return str(message).strip()
+
+    print(f"[INFO] SMTP server: {smtp_host}:{smtp_port}")
+    print(f"[INFO] SMTP envelope from: {email_from}")
+    print(f"[INFO] SMTP envelope to: {email_to}")
+
     with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-        server.ehlo()
-        server.starttls()
+        ehlo_code, ehlo_msg = server.ehlo()
+        print(f"[INFO] SMTP EHLO: {ehlo_code} {format_smtp_message(ehlo_msg)}")
+        starttls_code, starttls_msg = server.starttls()
+        print(f"[INFO] SMTP STARTTLS: {starttls_code} {format_smtp_message(starttls_msg)}")
+        ehlo_code, ehlo_msg = server.ehlo()
+        print(f"[INFO] SMTP EHLO (post-TLS): {ehlo_code} {format_smtp_message(ehlo_msg)}")
         server.login(smtp_user, smtp_pass)
-        server.sendmail(email_from, [email_to], msg.as_string())
+        payload = msg.as_string()
+        print(f"[INFO] SMTP message size: {len(payload)} bytes")
+        rejected = server.sendmail(email_from, [email_to], payload)
+        if rejected:
+            raise RuntimeError(f"SMTP rejected recipient(s): {rejected}")
 
     print(f"[INFO] Email sent → {email_to}")
 

@@ -235,6 +235,16 @@ not a verified Sender Identity.
    - `[ERROR] SMTP not configured – missing secrets: …` → secrets are not set (see above).
    - `[ERROR] Failed to send email: …` → SMTP credentials are wrong or the server rejected the connection.
 
+### "Gmail Sent is empty"
+
+**Expected:** When the workflow sends mail via SendGrid/Mailgun SMTP, Gmail does **not**
+record that message in your **Sent** folder because it was not sent through Gmail.
+
+**Next checks:**
+1. Open your SMTP provider dashboard and confirm the message was accepted/delivered.
+2. Verify the recipient is **not** on a suppression list.
+3. Check **Spam** and **All Mail** in Gmail.
+
 ---
 
 ## LinkedIn scraping notes

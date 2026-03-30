@@ -1,0 +1,42 @@
+Akash Vikram
+Email: akashvikram98@gmail.com | LinkedIn: linkedin.com/in/akashvikram98
+
+SUMMARY
+-------
+Results-driven Software Engineer with 3+ years of experience building scalable
+backend systems, data pipelines, and automation workflows. Proficient in Python,
+JavaScript, and cloud platforms (AWS, GCP). Passionate about applying technology
+to solve real-world problems efficiently.
+
+SKILLS
+------
+Languages     : Python, JavaScript (Node.js), SQL, Bash
+Frameworks    : FastAPI, Django, React, Express.js
+Data & ML     : pandas, NumPy, scikit-learn, BigQuery
+DevOps / Cloud: GitHub Actions, Docker, Kubernetes, AWS (Lambda, S3, EC2), GCP
+Tools         : Git, PostgreSQL, MongoDB, Redis, Elasticsearch, n8n, Airflow
+
+EXPERIENCE
+----------
+Software Engineer – Acme Corp (Jan 2023 – Present)
+• Designed and maintained ETL pipelines processing 50M+ events/day using Python and Airflow.
+• Built REST APIs with FastAPI serving 10 k RPM with P99 < 50 ms.
+• Automated deployment pipelines with GitHub Actions, cutting release time by 60 %.
+• Implemented data-quality checks that reduced production data errors by 40 %.
+
+Junior Software Engineer – Startup XYZ (Jun 2021 – Dec 2022)
+• Developed features for a SaaS analytics dashboard (React + Django).
+• Wrote web scrapers for competitive intelligence using Python + BeautifulSoup.
+• Reduced API response time by 35 % via query optimisation and Redis caching.
+
+EDUCATION
+---------
+B.Tech – Computer Science, VIT University (2017 – 2021)  GPA: 8.4 / 10
+
+CERTIFICATIONS
+--------------
+• AWS Certified Developer – Associate (2023)
+• Google Professional Data Engineer (2022)
+
+NOTE: Replace this file with your actual, up-to-date resume text.
+The scraper reads it for context; AI scoring is not performed in this workflow.

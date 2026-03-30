@@ -123,10 +123,11 @@ Go to **Settings → Secrets and variables → Actions → New repository secret
 | `SMTP_PORT` | optional | SMTP port – `587` for STARTTLS (default) |
 | `SMTP_USER` | ✅ | SMTP login username |
 | `SMTP_PASS` | ✅ | SMTP password or API key |
-| `EMAIL_FROM` | optional | Sender address shown in From header |
+| `EMAIL_FROM` | required* | Sender address shown in From header |
 | `EMAIL_TO` | ✅ | Recipient address (e.g. `akashvikram98@gmail.com`) |
 
-**If any of `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, or `EMAIL_TO` are missing the workflow will fail with a red ✗** so you are immediately alerted that the secrets need to be added.
+**If any of `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, or `EMAIL_TO` are missing the workflow will fail with a red ✗** so you are immediately alerted that the secrets need to be added.  
+**`EMAIL_FROM` is required when `SMTP_USER` is not an email address** (for example, SendGrid uses `SMTP_USER=apikey`).
 
 > ⚠️ **Never commit real credentials.** The `.env` file is git-ignored.
 
@@ -151,6 +152,7 @@ Go to **Settings → Secrets and variables → Actions → New repository secret
    - `SMTP_PORT` → `587`
    - `SMTP_USER` → `apikey`  *(literal string)*
    - `SMTP_PASS` → your SendGrid API key
+   - `EMAIL_FROM` → a **verified Sender Identity** in SendGrid (must match a verified sender)
 
 ### Any other SMTP relay
 Use the hostname, port, and credentials provided by your email provider.
@@ -212,6 +214,17 @@ the script skipped sending email because `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, 
 
 After this fix, if secrets are ever missing again the workflow will fail with a
 **red ✗** (exit code 1) so you are immediately alerted.
+
+### "The from address does not match a verified Sender Identity"
+
+**Root cause:** SendGrid rejected the email because the `EMAIL_FROM` address is
+not a verified Sender Identity.
+
+**Fix:**
+1. Go to **SendGrid → Settings → Sender Authentication**.
+2. Verify a **Single Sender** or your **Domain**.
+3. Set `EMAIL_FROM` to that verified address in GitHub Secrets.
+4. Re-run the workflow.
 
 ### How to verify email delivery from the workflow logs
 

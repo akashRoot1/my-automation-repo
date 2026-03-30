@@ -340,13 +340,21 @@ def send_email(subject: str, plain: str, html: str) -> None:
 
     Reads configuration from environment variables:
       SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS,
-      EMAIL_FROM (default = SMTP_USER), EMAIL_TO
+      EMAIL_FROM (defaults to SMTP_USER when SMTP_USER is an email), EMAIL_TO
     """
     smtp_host = os.environ["SMTP_HOST"]
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ["SMTP_USER"]
     smtp_pass = os.environ["SMTP_PASS"]
-    email_from = os.environ.get("EMAIL_FROM") or smtp_user
+    email_from = os.environ.get("EMAIL_FROM")
+    if not email_from:
+        if "@" in smtp_user:
+            email_from = smtp_user
+        else:
+            raise ValueError(
+                "EMAIL_FROM is required when SMTP_USER is not an email address "
+                "(for SendGrid, set EMAIL_FROM to a verified Sender Identity)."
+            )
     email_to = os.environ["EMAIL_TO"]
 
     msg = MIMEMultipart("alternative")
@@ -422,14 +430,19 @@ def main() -> None:
 
     # 6. Send email (if SMTP is configured)
     required_env = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_TO")
-    if all(os.environ.get(k) for k in required_env):
+    missing = [k for k in required_env if not os.environ.get(k)]
+    smtp_user = os.environ.get("SMTP_USER", "")
+    email_from = os.environ.get("EMAIL_FROM", "")
+    if smtp_user and "@" not in smtp_user and not email_from:
+        missing.append("EMAIL_FROM")
+
+    if not missing:
         try:
             send_email(subject, plain, html)
         except Exception as exc:
             print(f"[ERROR] Failed to send email: {exc}", file=sys.stderr)
             sys.exit(1)
     else:
-        missing = [k for k in required_env if not os.environ.get(k)]
         # DRY_RUN must be explicitly set to a truthy value ("1", "true", "yes").
         # Any other value – including the string "false" – is treated as disabled.
         dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
@@ -444,6 +457,7 @@ def main() -> None:
                 "Add these as GitHub Actions secrets:\n"
                 "  Settings → Secrets and variables → Actions → New repository secret\n"
                 "Required: SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_TO\n"
+                "EMAIL_FROM is required when SMTP_USER is not an email address.\n"
                 "To skip email sending intentionally, set the DRY_RUN=1 environment variable.",
                 file=sys.stderr,
             )

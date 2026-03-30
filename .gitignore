@@ -5,6 +5,18 @@
 n8n_data/
 postgres_data/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
 # macOS
 .DS_Store
 

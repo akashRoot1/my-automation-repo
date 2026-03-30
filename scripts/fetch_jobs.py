@@ -14,8 +14,11 @@ Usage (local):
     export EMAIL_TO=your-email@example.com
     python scripts/fetch_jobs.py
 
-If SMTP_HOST / SMTP_USER / SMTP_PASS / EMAIL_TO are not set the script will
-still run and print the job list to stdout (useful for local testing).
+If SMTP_HOST / SMTP_USER / SMTP_PASS / EMAIL_TO are not set the script exits
+with code 1 so that GitHub Actions shows a red ✗ (alerting you to add the
+missing secrets).  Set DRY_RUN=1 to skip the email check entirely, e.g.:
+
+    DRY_RUN=1 python scripts/fetch_jobs.py
 
 Filtering logic:
     - Job titles containing 'Senior', 'Staff', 'Principal', 'Lead', or 'Manager'
@@ -337,13 +340,21 @@ def send_email(subject: str, plain: str, html: str) -> None:
 
     Reads configuration from environment variables:
       SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS,
-      EMAIL_FROM (default = SMTP_USER), EMAIL_TO
+      EMAIL_FROM (defaults to SMTP_USER when SMTP_USER is an email), EMAIL_TO
     """
     smtp_host = os.environ["SMTP_HOST"]
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ["SMTP_USER"]
     smtp_pass = os.environ["SMTP_PASS"]
-    email_from = os.environ.get("EMAIL_FROM") or smtp_user
+    email_from = os.environ.get("EMAIL_FROM")
+    if not email_from:
+        if "@" in smtp_user:
+            email_from = smtp_user
+        else:
+            raise ValueError(
+                "EMAIL_FROM is required when SMTP_USER is not an email address "
+                "(for SendGrid, set EMAIL_FROM to a verified Sender Identity)."
+            )
     email_to = os.environ["EMAIL_TO"]
 
     msg = MIMEMultipart("alternative")
@@ -353,11 +364,30 @@ def send_email(subject: str, plain: str, html: str) -> None:
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
+    def format_smtp_response(message: object) -> str:
+        if message is None:
+            return ""
+        if isinstance(message, bytes):
+            return message.decode("utf-8", "replace").strip()
+        return str(message).strip()
+
+    print(f"[INFO] SMTP server: {smtp_host}:{smtp_port}")
+    print(f"[INFO] SMTP envelope from: {email_from}")
+    print(f"[INFO] SMTP envelope to: {email_to}")
+
     with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-        server.ehlo()
-        server.starttls()
+        ehlo_code, ehlo_msg = server.ehlo()
+        print(f"[INFO] SMTP EHLO: {ehlo_code} {format_smtp_response(ehlo_msg)}")
+        starttls_code, starttls_msg = server.starttls()
+        print(f"[INFO] SMTP STARTTLS: {starttls_code} {format_smtp_response(starttls_msg)}")
+        ehlo_code, ehlo_msg = server.ehlo()
+        print(f"[INFO] SMTP EHLO (post-TLS): {ehlo_code} {format_smtp_response(ehlo_msg)}")
         server.login(smtp_user, smtp_pass)
-        server.sendmail(email_from, [email_to], msg.as_string())
+        payload = msg.as_string()
+        print(f"[INFO] SMTP message size: {len(payload)} bytes")
+        rejected = server.sendmail(email_from, [email_to], payload)
+        if rejected:
+            raise RuntimeError(f"SMTP rejected recipient(s): {rejected}")
 
     print(f"[INFO] Email sent → {email_to}")
 
@@ -419,18 +449,38 @@ def main() -> None:
 
     # 6. Send email (if SMTP is configured)
     required_env = ("SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_TO")
-    if all(os.environ.get(k) for k in required_env):
+    missing = [k for k in required_env if not os.environ.get(k)]
+    smtp_user = os.environ.get("SMTP_USER", "")
+    email_from = os.environ.get("EMAIL_FROM", "")
+    if smtp_user and "@" not in smtp_user and not email_from:
+        missing.append("EMAIL_FROM")
+
+    if not missing:
         try:
             send_email(subject, plain, html)
         except Exception as exc:
             print(f"[ERROR] Failed to send email: {exc}", file=sys.stderr)
             sys.exit(1)
     else:
-        missing = [k for k in required_env if not os.environ.get(k)]
-        print(
-            f"[INFO] SMTP not fully configured (missing: {', '.join(missing)}) "
-            "– skipping email send."
-        )
+        # DRY_RUN must be explicitly set to a truthy value ("1", "true", "yes").
+        # Any other value – including the string "false" – is treated as disabled.
+        dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+        if dry_run:
+            print(
+                f"[INFO] DRY_RUN mode: SMTP not configured "
+                f"(missing: {', '.join(missing)}) – skipping email send."
+            )
+        else:
+            print(
+                f"[ERROR] SMTP not configured – missing secrets: {', '.join(missing)}.\n"
+                "Add these as GitHub Actions secrets:\n"
+                "  Settings → Secrets and variables → Actions → New repository secret\n"
+                "Required: SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_TO\n"
+                "EMAIL_FROM is required when SMTP_USER is not an email address.\n"
+                "To skip email sending intentionally, set the DRY_RUN=1 environment variable.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 if __name__ == "__main__":

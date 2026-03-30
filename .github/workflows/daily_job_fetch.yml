@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 5 * * *'   # 05:00 UTC every day
   workflow_dispatch:        # allow manual trigger from the Actions tab
+    inputs:
+      dry_run:
+        description: 'Set to "true" to skip email sending (test without SMTP secrets)'
+        required: false
+        default: 'false'
 
 jobs:
   fetch-jobs:
@@ -33,4 +38,5 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: python scripts/fetch_jobs.py

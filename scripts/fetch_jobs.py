@@ -364,7 +364,7 @@ def send_email(subject: str, plain: str, html: str) -> None:
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
-    def format_smtp_message(message: object) -> str:
+    def format_smtp_response(message: object) -> str:
         if message is None:
             return ""
         if isinstance(message, bytes):
@@ -377,11 +377,11 @@ def send_email(subject: str, plain: str, html: str) -> None:
 
     with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         ehlo_code, ehlo_msg = server.ehlo()
-        print(f"[INFO] SMTP EHLO: {ehlo_code} {format_smtp_message(ehlo_msg)}")
+        print(f"[INFO] SMTP EHLO: {ehlo_code} {format_smtp_response(ehlo_msg)}")
         starttls_code, starttls_msg = server.starttls()
-        print(f"[INFO] SMTP STARTTLS: {starttls_code} {format_smtp_message(starttls_msg)}")
+        print(f"[INFO] SMTP STARTTLS: {starttls_code} {format_smtp_response(starttls_msg)}")
         ehlo_code, ehlo_msg = server.ehlo()
-        print(f"[INFO] SMTP EHLO (post-TLS): {ehlo_code} {format_smtp_message(ehlo_msg)}")
+        print(f"[INFO] SMTP EHLO (post-TLS): {ehlo_code} {format_smtp_response(ehlo_msg)}")
         server.login(smtp_user, smtp_pass)
         payload = msg.as_string()
         print(f"[INFO] SMTP message size: {len(payload)} bytes")
